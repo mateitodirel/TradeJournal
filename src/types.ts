@@ -1,0 +1,145 @@
+export interface Account {
+  id: number
+  name: string
+  broker: string
+  starting_balance: number
+  currency: string
+}
+
+export interface Strategy {
+  id: number
+  name: string
+  description: string
+}
+
+export interface Confluence {
+  id: number
+  name: string
+}
+
+export interface Trade {
+  id: number
+  name: string
+  date: string
+  pair: string | null
+  session: string | null
+  direction: string | null
+  risk_per_trade: number | null
+  pnl: number
+  r_multiple: number | null
+  followed_plan: boolean
+  break_even: boolean
+  entry_win: boolean
+  strategy_id: number | null
+  account_id: number | null
+  positive_tags: string[]
+  negative_tags: string[]
+  notes: string | null
+  created_at: string
+  confluence_ids: number[]
+}
+
+export interface MissedTrade {
+  id: number
+  date: string
+  pair: string | null
+  direction: string | null
+  would_be_pnl: number | null
+  reason_missed: string | null
+  strategy_id: number | null
+  tags: string[]
+  notes: string | null
+  confluence_ids: number[]
+}
+
+export interface DailyReview {
+  date: string
+  notes: string
+  emotion: string
+  lessons_learned: string
+}
+
+export interface StrategyPerformance {
+  id: number
+  name: string
+  description: string
+  tradeCount: number
+  winRate: number
+  profitFactor: number
+  expectancy: number
+  totalPnl: number
+  avgRMultiple: number
+  planAdherence: number
+  avgWin: number
+  avgLoss: number
+}
+
+export interface StrategyDetail {
+  id: number
+  name: string
+  description: string
+  stats: {
+    tradeCount: number
+    winRate: number
+    profitFactor: number
+    expectancy: number
+    totalPnl: number
+    avgRMultiple: number
+    planAdherence: number
+    avgWin: number
+    avgLoss: number
+  }
+  equityCurve: { date: string; cumulativePnl: number }[]
+  drawdown: { series: { date: string; drawdown: number }[]; maxDrawdown: number }
+  dayOfWeek: { day: string; trades: number; pnl: number; winRate: number }[]
+  trades: { id: number; date: string; name: string; pair: string | null; pnl: number; followed_plan: boolean }[]
+}
+
+export interface AnalyticsSummary {
+  kpis: { winRate: number; totalPnl: number; returnsPct: number; profitFactor: number }
+  radar: { metric: string; value: number }[]
+  equityCurve: { date: string; cumulativePnl: number }[]
+  drawdown: { series: { date: string; drawdown: number }[]; maxDrawdown: number }
+  dailyBars: { day: string; pnl: number }[]
+  dayOfWeek: { day: string; trades: number; pnl: number; winRate: number }[]
+  calendar: Record<string, { pnl: number; count: number }>
+  monthlyStats: {
+    winRate: number
+    riskReward: number
+    profitFactor: number
+    bestDayPnl: number
+    worstDayPnl: number
+    avgDailyPnl: number
+    tradeCount: number
+  }
+  insights: string[]
+  overall: { winRate: number; profitFactor: number; avgWin: number; avgLoss: number; totalTrades: number }
+}
+
+export interface MonthlyBreakdownEntry {
+  month: string
+  label: string
+  pnl: number
+  tradeCount: number
+}
+
+export interface FundedChallengeParams {
+  profitTargetPct: number
+  maxDailyLossPct: number
+  maxOverallDrawdownPct: number
+  riskPerTradePct: number
+  tradingDaysRemaining: number
+}
+
+export interface FundedChallengeResult {
+  sampleSize: number
+  passRate: number
+  dailyLossBreachRate: number
+  maxDrawdownBreachRate: number
+  ranOutOfDaysRate: number
+  medianDaysToPass: number | null
+  insufficientData: boolean
+}
+
+export const SESSIONS = ['Asia', 'London', 'New York', 'London/NY Overlap'] as const
+export const DIRECTIONS = ['Long', 'Short'] as const

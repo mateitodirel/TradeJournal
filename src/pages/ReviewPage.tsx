@@ -1,0 +1,97 @@
+import { useEffect, useState } from 'react'
+import { format } from 'date-fns'
+import type { DailyReview } from '../types'
+
+const EMOTIONS = ['Calm', 'Confident', 'Anxious', 'Frustrated', 'Excited', 'Tired', 'FOMO']
+
+export function ReviewPage({ jumpToDate }: { jumpToDate?: string | null }) {
+  const [reviews, setReviews] = useState<DailyReview[]>([])
+  const [date, setDate] = useState(jumpToDate ?? format(new Date(), 'yyyy-MM-dd'))
+  const [notes, setNotes] = useState('')
+  const [emotion, setEmotion] = useState(EMOTIONS[0])
+  const [lessons, setLessons] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  const load = () => {
+    window.api.reviews.getAll().then((r) => {
+      setReviews(r)
+      setLoading(false)
+    })
+  }
+
+  useEffect(load, [])
+
+  useEffect(() => {
+    if (jumpToDate) setDate(jumpToDate)
+  }, [jumpToDate])
+
+  useEffect(() => {
+    const existing = reviews.find((r) => r.date === date)
+    setNotes(existing?.notes ?? '')
+    setEmotion(existing?.emotion ?? EMOTIONS[0])
+    setLessons(existing?.lessons_learned ?? '')
+  }, [date, reviews])
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      await window.api.reviews.upsert({ date, notes, emotion, lessons_learned: lessons })
+      load()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return <div style={{ padding: 24, color: 'var(--text-muted)' }}>Loading reviews…</div>
+
+  return (
+    <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+      <div className="card" style={{ padding: 16, flex: 2 }}>
+        <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
+          <label className="field" style={{ flex: 1 }}>Date
+            <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </label>
+          <label className="field" style={{ flex: 1 }}>Emotion / State
+            <select className="select" value={emotion} onChange={(e) => setEmotion(e.target.value)}>
+              {EMOTIONS.map((e) => <option key={e} value={e}>{e}</option>)}
+            </select>
+          </label>
+        </div>
+        <label className="field" style={{ marginBottom: 14 }}>Review Notes
+          <textarea className="input" rows={6} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="How did today go? What did the market give you? How did you execute?" />
+        </label>
+        <label className="field" style={{ marginBottom: 14 }}>Lessons Learned
+          <textarea className="input" rows={4} value={lessons} onChange={(e) => setLessons(e.target.value)} placeholder="What will you do differently next time?" />
+        </label>
+        <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Review'}</button>
+      </div>
+
+      <div className="card" style={{ padding: 16, flex: 1, maxHeight: 560, overflowY: 'auto' }}>
+        <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 10 }}>Past Reviews</div>
+        {reviews.length === 0 && <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>No reviews yet.</div>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {reviews.map((r) => (
+            <div
+              key={r.date}
+              onClick={() => setDate(r.date)}
+              style={{
+                padding: '8px 10px',
+                borderRadius: 6,
+                cursor: 'pointer',
+                background: r.date === date ? 'var(--card-hover)' : 'transparent',
+                border: '1px solid var(--border-soft)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                <span style={{ fontWeight: 600 }}>{r.date}</span>
+                <span style={{ color: 'var(--text-dim)' }}>{r.emotion}</span>
+              </div>
+              {r.notes && <div style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.notes}</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
