@@ -44,7 +44,20 @@ export function TradeFormModal({
   const [negativeTags, setNegativeTags] = useState<string[]>(trade?.negative_tags ?? [])
   const [confluenceIds, setConfluenceIds] = useState<number[]>(trade?.confluence_ids ?? [])
   const [notes, setNotes] = useState(trade?.notes ?? '')
+  const [followedRules, setFollowedRules] = useState<string[]>(trade?.followed_rules ?? [])
   const [saving, setSaving] = useState(false)
+
+  const selectedStrategy = strategies.find((s) => s.id === strategyId)
+
+  const handleStrategyChange = (value: string) => {
+    setStrategyId(value ? Number(value) : '')
+    // a different strategy's rules against ticks from the prior strategy would be meaningless
+    setFollowedRules([])
+  }
+
+  const toggleFollowedRule = (rule: string) => {
+    setFollowedRules((prev) => (prev.includes(rule) ? prev.filter((r) => r !== rule) : [...prev, rule]))
+  }
 
   const save = async () => {
     setSaving(true)
@@ -64,6 +77,7 @@ export function TradeFormModal({
       account_id: accountId || null,
       positive_tags: positiveTags,
       negative_tags: negativeTags,
+      followed_rules: followedRules,
       confluence_ids: confluenceIds,
       notes,
     }
@@ -139,12 +153,27 @@ export function TradeFormModal({
             <input className="input" type="number" step="any" value={rMultiple} onChange={(e) => setRMultiple(e.target.value)} />
           </label>
           <label className="field">Model / Strategy
-            <select className="select" value={strategyId} onChange={(e) => setStrategyId(e.target.value ? Number(e.target.value) : '')}>
+            <select className="select" value={strategyId} onChange={(e) => handleStrategyChange(e.target.value)}>
               <option value="">—</option>
               {strategies.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </label>
         </div>
+
+        {selectedStrategy && selectedStrategy.rules.length > 0 && (
+          <div className="card" style={{ padding: 12 }}>
+            <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 8 }}>
+              Rules Followed — {selectedStrategy.name}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {selectedStrategy.rules.map((rule) => (
+                <label key={rule} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
+                  <input type="checkbox" checked={followedRules.includes(rule)} onChange={() => toggleFollowedRule(rule)} /> {rule}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div style={{ display: 'flex', gap: 20 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>

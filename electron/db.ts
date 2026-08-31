@@ -34,6 +34,15 @@ function migrateMissedTradesSchema(database: DatabaseSync) {
   }
 }
 
+function migrateStrategiesSchema(database: DatabaseSync) {
+  if (!columnExists(database, 'strategies', 'rules')) {
+    database.exec("ALTER TABLE strategies ADD COLUMN rules TEXT NOT NULL DEFAULT '[]'")
+  }
+  if (!columnExists(database, 'trades', 'followed_rules')) {
+    database.exec("ALTER TABLE trades ADD COLUMN followed_rules TEXT NOT NULL DEFAULT '[]'")
+  }
+}
+
 function migrateScreenshotsToImages(database: DatabaseSync) {
   if (!columnExists(database, 'trades', 'screenshot_path')) return
   const rows = database
@@ -79,7 +88,8 @@ export function getDb(): DatabaseSync {
     CREATE TABLE IF NOT EXISTS strategies (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
-      description TEXT
+      description TEXT,
+      rules TEXT NOT NULL DEFAULT '[]'
     );
 
     CREATE TABLE IF NOT EXISTS trades (
@@ -99,6 +109,7 @@ export function getDb(): DatabaseSync {
       account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
       positive_tags TEXT NOT NULL DEFAULT '[]',
       negative_tags TEXT NOT NULL DEFAULT '[]',
+      followed_rules TEXT NOT NULL DEFAULT '[]',
       notes TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -171,6 +182,7 @@ export function getDb(): DatabaseSync {
 
   migrateTradesSchema(db)
   migrateMissedTradesSchema(db)
+  migrateStrategiesSchema(db)
   migrateScreenshotsToImages(db)
 
   const accountCount = db.prepare('SELECT COUNT(*) as c FROM accounts').get() as { c: number }

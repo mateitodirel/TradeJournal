@@ -36,21 +36,39 @@ function tagsToJson(tags: unknown): string {
   return '[]'
 }
 
+function parseJsonArray(raw: unknown): string[] {
+  if (typeof raw !== 'string' || !raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
 function rowToTrade(row: Record<string, unknown>) {
   return {
     ...row,
     followed_plan: !!row.followed_plan,
     break_even: !!row.break_even,
     entry_win: !!row.entry_win,
-    positive_tags: JSON.parse((row.positive_tags as string) || '[]'),
-    negative_tags: JSON.parse((row.negative_tags as string) || '[]'),
+    positive_tags: parseJsonArray(row.positive_tags),
+    negative_tags: parseJsonArray(row.negative_tags),
+    followed_rules: parseJsonArray(row.followed_rules),
   }
 }
 
 function rowToMissedTrade(row: Record<string, unknown>) {
   return {
     ...row,
-    tags: JSON.parse((row.tags as string) || '[]'),
+    tags: parseJsonArray(row.tags),
+  }
+}
+
+function rowToStrategy(row: Record<string, unknown>) {
+  return {
+    ...row,
+    rules: parseJsonArray(row.rules),
   }
 }
 
@@ -135,15 +153,30 @@ export function registerIpcHandlers() {
 
   // ---------- strategies ----------
   ipcMain.handle('strategies:getAll', () => {
-    return db.prepare('SELECT * FROM strategies ORDER BY name ASC').all()
+    const rows = db.prepare('SELECT * FROM strategies ORDER BY name ASC').all() as Record<string, unknown>[]
+    return rows.map(rowToStrategy)
   })
-  ipcMain.handle('strategies:create', (_e, payload: { name: string; description?: string }) => {
-    const info = db.prepare('INSERT INTO strategies (name, description) VALUES (?, ?)').run(payload.name, payload.description ?? '')
-    return db.prepare('SELECT * FROM strategies WHERE id = ?').get(info.lastInsertRowid)
+  ipcMain.handle('strategies:create', (_e, payload: { name: string; description?: string; rules?: string[] }) => {
+    const info = db
+      .prepare('INSERT INTO strategies (name, description, rules) VALUES (?, ?, ?)')
+      .run(payload.name, payload.description ?? '', tagsToJson(payload.rules))
+    const row = db.prepare('SELECT * FROM strategies WHERE id = ?').get(info.lastInsertRowid) as Record<string, unknown>
+    return rowToStrategy(row)
   })
-  ipcMain.handle('strategies:update', (_e, id: number, payload: { name: string; description?: string }) => {
-    db.prepare('UPDATE strategies SET name = ?, description = ? WHERE id = ?').run(payload.name, payload.description ?? '', id)
-    return db.prepare('SELECT * FROM strategies WHERE id = ?').get(id)
+  ipcMain.handle('strategies:update', (_e, id: number, payload: { name: string; description?: string; rules?: string[] }) => {
+    if (payload.rules !== undefined) {
+      db.prepare('UPDATE strategies SET name = ?, description = ?, rules = ? WHERE id = ?').run(
+        payload.name,
+        payload.description ?? '',
+        tagsToJson(payload.rules),
+        id
+      )
+    } else {
+      // rules omitted (e.g. editing only the description) — leave the existing rule list untouched
+      db.prepare('UPDATE strategies SET name = ?, description = ? WHERE id = ?').run(payload.name, payload.description ?? '', id)
+    }
+    const row = db.prepare('SELECT * FROM strategies WHERE id = ?').get(id) as Record<string, unknown>
+    return rowToStrategy(row)
   })
   ipcMain.handle('strategies:delete', (_e, id: number) => {
     db.prepare('DELETE FROM strategies WHERE id = ?').run(id)
@@ -209,9 +242,9 @@ export function registerIpcHandlers() {
     const info = db
       .prepare(
         `INSERT INTO trades (name, date, pair, session, direction, risk_per_trade, pnl, r_multiple,
-          followed_plan, break_even, entry_win, strategy_id, account_id, positive_tags, negative_tags, notes)
+          followed_plan, break_even, entry_win, strategy_id, account_id, positive_tags, negative_tags, followed_rules, notes)
          VALUES (@name, @date, @pair, @session, @direction, @risk_per_trade, @pnl, @r_multiple,
-          @followed_plan, @break_even, @entry_win, @strategy_id, @account_id, @positive_tags, @negative_tags, @notes)`
+          @followed_plan, @break_even, @entry_win, @strategy_id, @account_id, @positive_tags, @negative_tags, @followed_rules, @notes)`
       )
       .run({
         name: (payload.name as string) ?? '',
@@ -229,6 +262,7 @@ export function registerIpcHandlers() {
         account_id: (payload.account_id as number) ?? null,
         positive_tags: tagsToJson(payload.positive_tags),
         negative_tags: tagsToJson(payload.negative_tags),
+        followed_rules: tagsToJson(payload.followed_rules),
         notes: (payload.notes as string) ?? null,
       })
     const id = info.lastInsertRowid as number
@@ -242,7 +276,7 @@ export function registerIpcHandlers() {
       `UPDATE trades SET name=@name, date=@date, pair=@pair, session=@session, direction=@direction,
         risk_per_trade=@risk_per_trade, pnl=@pnl, r_multiple=@r_multiple,
         followed_plan=@followed_plan, break_even=@break_even, entry_win=@entry_win, strategy_id=@strategy_id,
-        account_id=@account_id, positive_tags=@positive_tags, negative_tags=@negative_tags, notes=@notes
+        account_id=@account_id, positive_tags=@positive_tags, negative_tags=@negative_tags, followed_rules=@followed_rules, notes=@notes
        WHERE id=@id`
     ).run({
       id,
@@ -261,6 +295,7 @@ export function registerIpcHandlers() {
       account_id: (payload.account_id as number) ?? null,
       positive_tags: tagsToJson(payload.positive_tags),
       negative_tags: tagsToJson(payload.negative_tags),
+      followed_rules: tagsToJson(payload.followed_rules),
       notes: (payload.notes as string) ?? null,
     })
     setEntityConfluences(db, 'trade', id, payload.confluence_ids)
