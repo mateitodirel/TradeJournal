@@ -151,6 +151,12 @@ export interface AnalyticsSummary {
   overall: { winRate: number; profitFactor: number; avgWin: number; avgLoss: number; totalTrades: number }
 }
 
+export interface ComparisonSeries {
+  id: number
+  name: string
+  equityCurve: { date: string; cumulativePnl: number }[]
+}
+
 export interface MonthlyBreakdownEntry {
   month: string
   label: string
