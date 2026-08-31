@@ -74,9 +74,9 @@ export function AnalyticsPage({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <div className="glass-rail">
           {SECTIONS.map((s) => (
-            <button key={s.key} className="btn" style={{ fontSize: 11.5, padding: '5px 10px' }} onClick={() => scrollTo(s.key)}>
+            <button key={s.key} className="glass-rail__item" onClick={() => scrollTo(s.key)}>
               {s.label}
             </button>
           ))}

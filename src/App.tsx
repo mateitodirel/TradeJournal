@@ -45,6 +45,18 @@ function App() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      {/* Hidden SVG defs powering the .liquid-glass / .glass-rail "liquid edge"
+          effect in theme.css (feTurbulence + feDisplacementMap, referenced via
+          filter: url(#liquid-glass-filter)). Defined once here near the root. */}
+      <svg width="0" height="0" style={{ position: 'absolute', width: 0, height: 0 }} aria-hidden="true" focusable="false">
+        <defs>
+          <filter id="liquid-glass-filter" x="-20%" y="-20%" width="140%" height="140%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.012 0.02" numOctaves={2} seed={7} result="noise" />
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale={10} xChannelSelector="R" yChannelSelector="G" />
+          </filter>
+        </defs>
+      </svg>
+
       <header style={{ padding: '20px 28px 0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -60,7 +72,7 @@ function App() {
           </div>
         </div>
 
-        <nav style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border)' }}>
+        <nav className="glass-rail">
           {TABS.map((t) => (
             <button
               key={t.key}
@@ -68,32 +80,11 @@ function App() {
                 setTab(t.key)
                 if (t.key === 'whatsnew') setSeenVersion(LATEST_VERSION)
               }}
-              className="btn"
-              style={{
-                position: 'relative',
-                border: 'none',
-                borderRadius: 0,
-                borderBottom: tab === t.key ? '2px solid var(--accent)' : '2px solid transparent',
-                background: 'transparent',
-                color: tab === t.key ? 'var(--text)' : 'var(--text-muted)',
-                fontWeight: tab === t.key ? 600 : 400,
-                padding: '10px 14px',
-              }}
+              className={`glass-rail__item${tab === t.key ? ' active' : ''}`}
             >
               {t.label}
               {t.key === 'whatsnew' && seenVersion !== LATEST_VERSION && (
-                <span
-                  aria-label="new updates"
-                  style={{
-                    position: 'absolute',
-                    top: 6,
-                    right: 2,
-                    width: 6,
-                    height: 6,
-                    borderRadius: '50%',
-                    background: 'var(--accent)',
-                  }}
-                />
+                <span aria-label="new updates" className="glass-rail__dot" />
               )}
             </button>
           ))}

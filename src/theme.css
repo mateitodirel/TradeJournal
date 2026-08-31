@@ -6,7 +6,10 @@
   --border: #262b2f;
   --border-soft: #1e2226;
   --text: #e8eaed;
-  --text-muted: #8b9299;
+  /* Bumped one shade lighter (was #8b9299) so it keeps ~4.5:1+ contrast on
+     both solid dark surfaces and the translucent .liquid-glass / .glass-rail
+     backgrounds introduced below (checked against --bg and --card). */
+  --text-muted: #9aa1a8;
   --text-dim: #5b6167;
   --green: #34d399;
   --green-soft: rgba(52, 211, 153, 0.14);
@@ -16,6 +19,10 @@
   --radius: 10px;
   --radius-sm: 6px;
   font-family: -apple-system, 'Segoe UI', Inter, Roboto, Helvetica, Arial, sans-serif;
+  /* Fluid base size: the Electron window is freely resizable at arbitrary
+     DPI, so a flat px size reads too small at ~900px-wide windows and too
+     large at 4K. body has no font-size of its own, so it inherits this. */
+  font-size: clamp(13px, 0.8vw + 9px, 15px);
   color-scheme: dark;
 }
 
@@ -31,7 +38,10 @@ html, body, #root {
 body {
   background: var(--bg);
   color: var(--text);
-  font-size: 13px;
+  /* font-size intentionally omitted: inherits the fluid clamp() set on
+     :root above so it scales with window width/DPI instead of being flat. */
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 button, input, select, textarea {
@@ -339,4 +349,127 @@ table.data-table tbody tr:hover {
     animation-delay: 0ms !important;
   }
   .wn-cell { opacity: 1; }
+}
+
+/* ============================================================
+   Liquid glass system (Phase 1a)
+   .liquid-glass  — generic translucent hero-surface panel.
+   .glass-rail    — same paint recipe, shaped for a horizontal
+                    row of pill/tab buttons (.glass-rail__item).
+   Both classes share one paint recipe below so every glass
+   surface in the app stays visually identical; .glass-rail only
+   overrides shape (border-radius/padding/flex).
+
+   Perf note: backdrop-filter + the SVG displacement filter are
+   GPU-heavy. Only apply these classes to 1-2 hero surfaces (the
+   App.tsx top nav + AnalyticsPage section rail) — not every card.
+   ============================================================ */
+
+.liquid-glass,
+.glass-rail {
+  position: relative;
+  background: rgba(21, 24, 27, 0.6); /* --card, translucent */
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius);
+  backdrop-filter: blur(18px) saturate(1.5);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 8px 28px rgba(0, 0, 0, 0.32);
+  isolation: isolate;
+}
+
+/* Liquid edge: an SVG feTurbulence/feDisplacementMap filter (defined once
+   in a hidden <svg> in App.tsx, id="liquid-glass-filter") distorts this
+   pseudo-element's gradient+border into a gentle organic shimmer. It's
+   z-index:-1 inside the panel's own stacking context (isolation: isolate
+   above), so it paints behind the real content/text but above the panel's
+   own blurred background — text stays crisp, only the edge shimmers. */
+.liquid-glass::before,
+.glass-rail::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.1),
+    rgba(255, 255, 255, 0) 45%,
+    rgba(62, 207, 142, 0.08) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  filter: url(#liquid-glass-filter);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .liquid-glass::before,
+  .glass-rail::before {
+    filter: none;
+  }
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .liquid-glass,
+  .glass-rail {
+    background: var(--card);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .liquid-glass::before,
+  .glass-rail::before {
+    filter: none;
+    background: none;
+    border: none;
+  }
+}
+
+.glass-rail {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 14px;
+  flex-wrap: wrap;
+}
+
+.glass-rail__item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 7px 14px;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.glass-rail__item:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+.glass-rail__item.active {
+  color: var(--text);
+  background: rgba(62, 207, 142, 0.16);
+  font-weight: 600;
+}
+.glass-rail__item.active:hover {
+  background: rgba(62, 207, 142, 0.2);
+}
+
+.glass-rail__dot {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px rgba(62, 207, 142, 0.25);
 }
