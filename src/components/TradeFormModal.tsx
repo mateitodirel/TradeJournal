@@ -35,6 +35,8 @@ export function TradeFormModal({
   const [riskPerTrade, setRiskPerTrade] = useState(trade?.risk_per_trade?.toString() ?? '')
   const [pnl, setPnl] = useState(trade?.pnl?.toString() ?? '')
   const [rMultiple, setRMultiple] = useState(trade?.r_multiple?.toString() ?? '')
+  const [mfeR, setMfeR] = useState(trade?.mfe_r?.toString() ?? '')
+  const [maeR, setMaeR] = useState(trade?.mae_r?.toString() ?? '')
   const [followedPlan, setFollowedPlan] = useState(trade?.followed_plan ?? false)
   const [breakEven, setBreakEven] = useState(trade?.break_even ?? false)
   const [entryWin, setEntryWin] = useState(trade?.entry_win ?? false)
@@ -70,6 +72,8 @@ export function TradeFormModal({
       risk_per_trade: riskPerTrade ? parseFloat(riskPerTrade) : null,
       pnl: pnl ? parseFloat(pnl) : 0,
       r_multiple: rMultiple ? parseFloat(rMultiple) : null,
+      mfe_r: mfeR ? parseFloat(mfeR) : null,
+      mae_r: maeR ? parseFloat(maeR) : null,
       followed_plan: followedPlan,
       break_even: breakEven,
       entry_win: entryWin,
@@ -157,6 +161,15 @@ export function TradeFormModal({
               <option value="">—</option>
               {strategies.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
+          </label>
+        </div>
+
+        <div style={grid}>
+          <label className="field">MFE (R) <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>optional</span>
+            <input className="input" type="number" step="any" value={mfeR} onChange={(e) => setMfeR(e.target.value)} placeholder="Best R the trade reached" />
+          </label>
+          <label className="field">MAE (R) <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>optional</span>
+            <input className="input" type="number" step="any" value={maeR} onChange={(e) => setMaeR(e.target.value)} placeholder="Worst R the trade reached" />
           </label>
         </div>
 

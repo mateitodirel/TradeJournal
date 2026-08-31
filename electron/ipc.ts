@@ -241,9 +241,9 @@ export function registerIpcHandlers() {
   ipcMain.handle('trades:create', (_e, payload: Record<string, unknown>) => {
     const info = db
       .prepare(
-        `INSERT INTO trades (name, date, pair, session, direction, risk_per_trade, pnl, r_multiple,
+        `INSERT INTO trades (name, date, pair, session, direction, risk_per_trade, pnl, r_multiple, mfe_r, mae_r,
           followed_plan, break_even, entry_win, strategy_id, account_id, positive_tags, negative_tags, followed_rules, notes)
-         VALUES (@name, @date, @pair, @session, @direction, @risk_per_trade, @pnl, @r_multiple,
+         VALUES (@name, @date, @pair, @session, @direction, @risk_per_trade, @pnl, @r_multiple, @mfe_r, @mae_r,
           @followed_plan, @break_even, @entry_win, @strategy_id, @account_id, @positive_tags, @negative_tags, @followed_rules, @notes)`
       )
       .run({
@@ -255,6 +255,8 @@ export function registerIpcHandlers() {
         risk_per_trade: (payload.risk_per_trade as number) ?? null,
         pnl: (payload.pnl as number) ?? 0,
         r_multiple: (payload.r_multiple as number) ?? null,
+        mfe_r: (payload.mfe_r as number) ?? null,
+        mae_r: (payload.mae_r as number) ?? null,
         followed_plan: payload.followed_plan ? 1 : 0,
         break_even: payload.break_even ? 1 : 0,
         entry_win: payload.entry_win ? 1 : 0,
@@ -274,7 +276,7 @@ export function registerIpcHandlers() {
   ipcMain.handle('trades:update', (_e, id: number, payload: Record<string, unknown>) => {
     db.prepare(
       `UPDATE trades SET name=@name, date=@date, pair=@pair, session=@session, direction=@direction,
-        risk_per_trade=@risk_per_trade, pnl=@pnl, r_multiple=@r_multiple,
+        risk_per_trade=@risk_per_trade, pnl=@pnl, r_multiple=@r_multiple, mfe_r=@mfe_r, mae_r=@mae_r,
         followed_plan=@followed_plan, break_even=@break_even, entry_win=@entry_win, strategy_id=@strategy_id,
         account_id=@account_id, positive_tags=@positive_tags, negative_tags=@negative_tags, followed_rules=@followed_rules, notes=@notes
        WHERE id=@id`
@@ -288,6 +290,8 @@ export function registerIpcHandlers() {
       risk_per_trade: (payload.risk_per_trade as number) ?? null,
       pnl: (payload.pnl as number) ?? 0,
       r_multiple: (payload.r_multiple as number) ?? null,
+      mfe_r: (payload.mfe_r as number) ?? null,
+      mae_r: (payload.mae_r as number) ?? null,
       followed_plan: payload.followed_plan ? 1 : 0,
       break_even: payload.break_even ? 1 : 0,
       entry_win: payload.entry_win ? 1 : 0,

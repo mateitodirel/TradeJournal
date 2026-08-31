@@ -26,6 +26,12 @@ function migrateTradesSchema(database: DatabaseSync) {
       }
     }
   }
+  if (!columnExists(database, 'trades', 'mfe_r')) {
+    database.exec('ALTER TABLE trades ADD COLUMN mfe_r REAL')
+  }
+  if (!columnExists(database, 'trades', 'mae_r')) {
+    database.exec('ALTER TABLE trades ADD COLUMN mae_r REAL')
+  }
 }
 
 function migrateMissedTradesSchema(database: DatabaseSync) {
@@ -102,6 +108,8 @@ export function getDb(): DatabaseSync {
       risk_per_trade REAL,
       pnl REAL NOT NULL DEFAULT 0,
       r_multiple REAL,
+      mfe_r REAL,
+      mae_r REAL,
       followed_plan INTEGER NOT NULL DEFAULT 0,
       break_even INTEGER NOT NULL DEFAULT 0,
       entry_win INTEGER NOT NULL DEFAULT 0,

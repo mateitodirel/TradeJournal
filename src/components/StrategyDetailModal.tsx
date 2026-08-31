@@ -3,6 +3,7 @@ import { Bar, BarChart, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip } from 
 import { Modal } from './Modal'
 import { EquityCurveChart } from './EquityCurveChart'
 import { DayOfWeekChart } from './DayOfWeekChart'
+import { MfeMaeScatter } from './MfeMaeScatter'
 import { StrategyPropFirmTab } from './StrategyPropFirmTab'
 import { formatRatio } from '../format'
 import { COLORS } from '../colors'
@@ -261,6 +262,10 @@ export function StrategyDetailModal({
               </ResponsiveContainer>
             )}
           </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <MfeMaeScatter trades={detail.trades} />
         </div>
 
         <div className="card" style={{ padding: 16 }}>

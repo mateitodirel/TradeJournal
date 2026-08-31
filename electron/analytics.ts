@@ -527,6 +527,8 @@ export interface StrategyPerformance {
 
 type StrategyTradeRow = TradeRow & {
   r_multiple: number | null
+  mfe_r: number | null
+  mae_r: number | null
   name: string
   pair: string | null
   followed_rules: string | null
@@ -843,7 +845,17 @@ export interface StrategyDetail {
   equityCurve: { date: string; cumulativePnl: number }[]
   drawdown: { series: { date: string; drawdown: number }[]; maxDrawdown: number }
   dayOfWeek: ReturnType<typeof dayOfWeekBreakdownOf>
-  trades: { id: number; date: string; name: string; pair: string | null; pnl: number; followed_plan: boolean }[]
+  trades: {
+    id: number
+    date: string
+    name: string
+    pair: string | null
+    pnl: number
+    followed_plan: boolean
+    r_multiple: number | null
+    mfe_r: number | null
+    mae_r: number | null
+  }[]
 }
 
 export function getStrategyDetail(strategyId: number): StrategyDetail | null {
@@ -857,7 +869,7 @@ export function getStrategyDetail(strategyId: number): StrategyDetail | null {
 
   const trades = db
     .prepare(
-      'SELECT id, date, pnl, followed_plan, session, r_multiple, name, pair, followed_rules FROM trades WHERE strategy_id = ? ORDER BY date ASC'
+      'SELECT id, date, pnl, followed_plan, session, r_multiple, mfe_r, mae_r, name, pair, followed_rules FROM trades WHERE strategy_id = ? ORDER BY date ASC'
     )
     .all(strategyId) as unknown as StrategyTradeRow[]
 
@@ -879,7 +891,17 @@ export function getStrategyDetail(strategyId: number): StrategyDetail | null {
     trades: trades
       .slice(-50)
       .reverse()
-      .map((t) => ({ id: t.id, date: t.date, name: t.name, pair: t.pair, pnl: t.pnl, followed_plan: !!t.followed_plan })),
+      .map((t) => ({
+        id: t.id,
+        date: t.date,
+        name: t.name,
+        pair: t.pair,
+        pnl: t.pnl,
+        followed_plan: !!t.followed_plan,
+        r_multiple: t.r_multiple ?? null,
+        mfe_r: t.mfe_r ?? null,
+        mae_r: t.mae_r ?? null,
+      })),
   }
 }
 
