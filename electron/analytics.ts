@@ -296,12 +296,18 @@ export function getMonthlyBreakdown(filters: MonthlyBreakdownFilters) {
   }))
 }
 
+export type DrawdownMode = 'static' | 'trailing-eod' | 'trailing-intraday'
+
 export interface FundedChallengeParams {
   profitTargetPct: number
   maxDailyLossPct: number
   maxOverallDrawdownPct: number
   riskPerTradePct: number
   tradingDaysRemaining: number
+  drawdownMode?: DrawdownMode
+  lockDrawdownAtBreakeven?: boolean
+  maxDayProfitPct?: number | null
+  enforceConsistencyRule?: boolean
 }
 
 export interface FundedChallengeResult {
@@ -309,10 +315,16 @@ export interface FundedChallengeResult {
   passRate: number
   dailyLossBreachRate: number
   maxDrawdownBreachRate: number
+  consistencyBreachRate: number
   ranOutOfDaysRate: number
   medianDaysToPass: number | null
   insufficientData: boolean
+  credibilityWeight: number
 }
+
+// Neutral placeholder R-multiple distribution used to fill out the resampling pool when
+// logged trade history is thin — see credibility blending below.
+const PLACEHOLDER_R_OUTCOMES = [1, 1, -1, -1, 2, -1, 1, -1, 1.5, -1]
 
 export function simulateFundedChallenge(params: FundedChallengeParams): FundedChallengeResult {
   const db = getDb()
@@ -332,40 +344,96 @@ export function simulateFundedChallenge(params: FundedChallengeParams): FundedCh
     }
   }
 
-  const insufficientData = rOutcomes.length < 10
-  if (insufficientData) {
-    // not enough R-multiple / risk-sized history to bootstrap from — fall back to a neutral
-    // placeholder distribution so the tool still returns a (clearly-flagged) estimate
-    rOutcomes.push(1, 1, -1, -1, 2, -1, 1, -1, 1.5, -1)
-  }
+  const loggedCount = rOutcomes.length
+  // Credibility weight: how much to trust the real logged sample vs. the neutral placeholder.
+  // w=0 at 0 logged trades (100% placeholder), w≈0.71 at 10, approaching 1 as history grows —
+  // replaces the old hard "< 10 trades" cliff with a smooth blend.
+  const credibilityWeight = loggedCount / (loggedCount + 4)
+  const insufficientData = credibilityWeight < 0.6
+
+  // Resampling pools: the block bootstrap below draws contiguous blocks from one of these two
+  // chronological sequences, chosen per-block with probability credibilityWeight / (1 - credibilityWeight).
+  const realPool = rOutcomes
+  const placeholderPool = PLACEHOLDER_R_OUTCOMES
 
   const distinctDays = new Set(rows.map((r) => r.date)).size || 1
   const tradesPerDay = Math.max(1, Math.round(rows.length / distinctDays))
+
+  const drawdownMode: DrawdownMode = params.drawdownMode ?? 'trailing-intraday'
+  const lockDrawdownAtBreakeven = params.lockDrawdownAtBreakeven ?? false
+  const enforceConsistencyRule = params.enforceConsistencyRule ?? false
+  const maxDayProfitPct = params.maxDayProfitPct ?? 30
+
+  // Block bootstrap: instead of drawing single trades IID (which erases autocorrelation and
+  // makes losing streaks vanish), resample contiguous windows of the actual chronological
+  // outcome sequence. Block length adapts to sample size — long enough to preserve streak
+  // structure, short enough that a small logged history still has multiple blocks to draw from.
+  function blockLength(poolSize: number): number {
+    return Math.max(1, Math.min(10, Math.max(5, Math.round(poolSize / 4))))
+  }
+
+  // Pull `count` outcomes as a sequence of contiguous blocks, re-picking a new random block
+  // (possibly from the other pool, per credibilityWeight) whenever the current block runs out.
+  function drawBlockBootstrap(count: number): number[] {
+    const result: number[] = []
+    while (result.length < count) {
+      const useReal = realPool.length > 0 && Math.random() < credibilityWeight
+      const pool = useReal ? realPool : placeholderPool
+      const len = Math.min(blockLength(pool.length), pool.length)
+      const startMax = Math.max(1, pool.length - len + 1)
+      const start = Math.floor(Math.random() * startMax)
+      for (let i = 0; i < len && result.length < count; i++) {
+        result.push(pool[start + i])
+      }
+    }
+    return result
+  }
 
   const N = 3000
   const days = Math.max(1, Math.min(Math.round(params.tradingDaysRemaining) || 1, 365))
   let passes = 0
   let dailyLossBreaches = 0
   let maxDrawdownBreaches = 0
+  let consistencyFails = 0
   let ranOutOfDays = 0
   const daysToPass: number[] = []
 
   for (let sim = 0; sim < N; sim++) {
     let equityPct = 0
-    let peakEquityPct = 0
-    let outcome: 'pass' | 'dailyLoss' | 'maxDrawdown' | 'ranOut' = 'ranOut'
+    let peakEquityPct = 0 // trailing-intraday peak
+    let eodPeakEquityPct = 0 // trailing-eod peak (updated only between days)
+    let drawdownFloorPct = -params.maxOverallDrawdownPct // absolute equity floor, updated per mode
+    let breakevenLocked = false
+    let outcome: 'pass' | 'dailyLoss' | 'maxDrawdown' | 'consistencyFail' | 'ranOut' = 'ranOut'
     let passDay = 0
+    const dailyProfits: number[] = [] // per-day PnL (only positive contributions matter for consistency)
+    let cumulativeProfitPct = 0 // sum of positive daily PnL so far (ignores losing days), for consistency check
 
     dayLoop: for (let d = 1; d <= days; d++) {
       let dailyPnlPct = 0
+      const dayOutcomes = drawBlockBootstrap(tradesPerDay)
       for (let t = 0; t < tradesPerDay; t++) {
-        const r = rOutcomes[Math.floor(Math.random() * rOutcomes.length)]
+        const r = dayOutcomes[t]
         const pnlPct = r * params.riskPerTradePct
         equityPct += pnlPct
         dailyPnlPct += pnlPct
         peakEquityPct = Math.max(peakEquityPct, equityPct)
-        const drawdownPct = peakEquityPct - equityPct
-        if (drawdownPct >= params.maxOverallDrawdownPct) {
+
+        if (lockDrawdownAtBreakeven && !breakevenLocked && equityPct >= 0) {
+          breakevenLocked = true
+        }
+
+        let currentPeakForFloor: number
+        if (drawdownMode === 'static') {
+          currentPeakForFloor = 0
+        } else if (drawdownMode === 'trailing-eod') {
+          currentPeakForFloor = eodPeakEquityPct
+        } else {
+          currentPeakForFloor = peakEquityPct
+        }
+        drawdownFloorPct = breakevenLocked ? 0 : currentPeakForFloor - params.maxOverallDrawdownPct
+
+        if (equityPct <= drawdownFloorPct) {
           outcome = 'maxDrawdown'
           break dayLoop
         }
@@ -374,17 +442,30 @@ export function simulateFundedChallenge(params: FundedChallengeParams): FundedCh
           break dayLoop
         }
         if (equityPct >= params.profitTargetPct) {
-          outcome = 'pass'
+          dailyProfits.push(dailyPnlPct)
+          cumulativeProfitPct += Math.max(0, dailyPnlPct)
+          if (enforceConsistencyRule && cumulativeProfitPct > 0) {
+            const largestDay = Math.max(...dailyProfits, 0)
+            const breach = largestDay / cumulativeProfitPct > maxDayProfitPct / 100
+            outcome = breach ? 'consistencyFail' : 'pass'
+          } else {
+            outcome = 'pass'
+          }
           passDay = d
           break dayLoop
         }
       }
+      dailyProfits.push(dailyPnlPct)
+      cumulativeProfitPct += Math.max(0, dailyPnlPct)
+      // trailing-eod peak only updates at day boundaries, not intraday
+      eodPeakEquityPct = Math.max(eodPeakEquityPct, equityPct)
     }
 
     if (outcome === 'pass') {
       passes++
       daysToPass.push(passDay)
-    } else if (outcome === 'dailyLoss') dailyLossBreaches++
+    } else if (outcome === 'consistencyFail') consistencyFails++
+    else if (outcome === 'dailyLoss') dailyLossBreaches++
     else if (outcome === 'maxDrawdown') maxDrawdownBreaches++
     else ranOutOfDays++
   }
@@ -397,9 +478,11 @@ export function simulateFundedChallenge(params: FundedChallengeParams): FundedCh
     passRate: round1((passes / N) * 100),
     dailyLossBreachRate: round1((dailyLossBreaches / N) * 100),
     maxDrawdownBreachRate: round1((maxDrawdownBreaches / N) * 100),
+    consistencyBreachRate: round1((consistencyFails / N) * 100),
     ranOutOfDaysRate: round1((ranOutOfDays / N) * 100),
     medianDaysToPass,
     insufficientData,
+    credibilityWeight: Math.round(credibilityWeight * 100) / 100,
   }
 }
 
