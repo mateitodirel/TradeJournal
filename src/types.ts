@@ -28,6 +28,8 @@ export interface Trade {
   risk_per_trade: number | null
   pnl: number
   r_multiple: number | null
+  mfe_r: number | null
+  mae_r: number | null
   followed_plan: boolean
   break_even: boolean
   entry_win: boolean
@@ -127,7 +129,17 @@ export interface StrategyDetail {
   equityCurve: { date: string; cumulativePnl: number }[]
   drawdown: { series: { date: string; drawdown: number }[]; maxDrawdown: number }
   dayOfWeek: { day: string; trades: number; pnl: number; winRate: number }[]
-  trades: { id: number; date: string; name: string; pair: string | null; pnl: number; followed_plan: boolean }[]
+  trades: {
+    id: number
+    date: string
+    name: string
+    pair: string | null
+    pnl: number
+    followed_plan: boolean
+    r_multiple: number | null
+    mfe_r: number | null
+    mae_r: number | null
+  }[]
 }
 
 export interface AnalyticsSummary {
