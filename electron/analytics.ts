@@ -560,11 +560,203 @@ export function getStrategyPerformance(): StrategyPerformance[] {
   })
 }
 
+// --- quantstats-style per-strategy metrics pack -----------------------------------------------
+// Pure formulas ported (not copied) from the public quantstats formula reference
+// (ranaroussi/quantstats, Apache-2.0) — reimplemented from scratch against this app's
+// data shape. All $-denominated (this app has no reliable per-strategy starting balance),
+// so Sharpe/Sortino/Calmar here are annualized ratios of the day-aggregated PnL series,
+// not literal % returns.
+
+function mean(values: number[]): number {
+  return values.length ? values.reduce((s, v) => s + v, 0) / values.length : 0
+}
+
+// Population stdev, mirroring the convention already used by consistencyScoreOf().
+function stdevOf(values: number[]): number {
+  if (values.length < 2) return 0
+  const m = mean(values)
+  const variance = values.reduce((s, v) => s + (v - m) ** 2, 0) / values.length
+  return Math.sqrt(variance)
+}
+
+function dailyPnlSeriesOf(trades: StrategyTradeRow[]): number[] {
+  const byDay = new Map<string, number>()
+  for (const t of trades) byDay.set(t.date, (byDay.get(t.date) ?? 0) + t.pnl)
+  return [...byDay.values()]
+}
+
+function sharpeOf(dailyPnl: number[]): number {
+  const sd = stdevOf(dailyPnl)
+  if (sd === 0) return 0
+  return (mean(dailyPnl) / sd) * Math.sqrt(252)
+}
+
+function sortinoOf(dailyPnl: number[]): number {
+  const downsideDeviation = Math.sqrt(mean(dailyPnl.map((v) => Math.min(v, 0) ** 2)))
+  if (downsideDeviation === 0) return 0
+  return (mean(dailyPnl) / downsideDeviation) * Math.sqrt(252)
+}
+
+function calmarOf(dailyPnl: number[], maxDrawdownAbs: number, netProfit: number): number {
+  if (maxDrawdownAbs === 0) return netProfit > 0 ? 5 : 0
+  return (mean(dailyPnl) * 252) / maxDrawdownAbs
+}
+
+function recoveryFactorOf(totalPnl: number, maxDrawdownAbs: number): number {
+  if (maxDrawdownAbs === 0) return totalPnl > 0 ? 5 : 0
+  return totalPnl / maxDrawdownAbs
+}
+
+function ulcerIndexOf(drawdownSeries: { drawdown: number }[]): number {
+  if (!drawdownSeries.length) return 0
+  return Math.sqrt(mean(drawdownSeries.map((d) => d.drawdown ** 2)))
+}
+
+function gainToPainOf(trades: StrategyTradeRow[]): number {
+  const netSum = trades.reduce((s, t) => s + t.pnl, 0)
+  const grossLoss = Math.abs(trades.filter((t) => t.pnl < 0).reduce((s, t) => s + t.pnl, 0))
+  if (grossLoss === 0) return netSum > 0 ? 999 : 0
+  return netSum / grossLoss
+}
+
+function consecutiveStreaksOf(trades: StrategyTradeRow[]): { maxWinStreak: number; maxLossStreak: number } {
+  let winStreak = 0
+  let lossStreak = 0
+  let maxWinStreak = 0
+  let maxLossStreak = 0
+  for (const t of trades) {
+    if (t.pnl > 0) {
+      winStreak += 1
+      lossStreak = 0
+    } else if (t.pnl < 0) {
+      lossStreak += 1
+      winStreak = 0
+    } else {
+      winStreak = 0
+      lossStreak = 0
+    }
+    maxWinStreak = Math.max(maxWinStreak, winStreak)
+    maxLossStreak = Math.max(maxLossStreak, lossStreak)
+  }
+  return { maxWinStreak, maxLossStreak }
+}
+
+// outlier ratio = mean(top ~10% by size) / mean(all). Falls back to largest/avg when the
+// sample is too small (<10) for a meaningful top-10% slice.
+function outlierRatioOf(magnitudes: number[]): number {
+  if (!magnitudes.length) return 0
+  const avg = mean(magnitudes)
+  if (avg === 0) return 0
+  const sorted = [...magnitudes].sort((a, b) => b - a)
+  if (sorted.length < 10) return sorted[0] / avg
+  const topCount = Math.max(1, Math.round(sorted.length * 0.1))
+  return mean(sorted.slice(0, topCount)) / avg
+}
+
+function sqnOf(rMultiples: number[]): number | null {
+  if (rMultiples.length < 5) return null
+  const sd = stdevOf(rMultiples)
+  if (sd === 0) return 0
+  return Math.sqrt(rMultiples.length) * (mean(rMultiples) / sd)
+}
+
+function sqnRating(sqn: number): string {
+  if (sqn < 1.6) return 'Poor'
+  if (sqn < 2.0) return 'Below Average'
+  if (sqn < 2.5) return 'Average'
+  if (sqn < 3.0) return 'Good'
+  if (sqn < 5.0) return 'Excellent'
+  if (sqn < 7.0) return 'Superb'
+  return 'Holy Grail'
+}
+
+const R_HISTOGRAM_BOUNDS = [-3, -2.5, -2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2, 2.5, 3]
+
+function rHistogramOf(rMultiples: number[]): { bucket: string; count: number }[] {
+  const buckets: { bucket: string; count: number }[] = [{ bucket: '< -3.0', count: 0 }]
+  for (let i = 0; i < R_HISTOGRAM_BOUNDS.length - 1; i++) {
+    buckets.push({ bucket: `${R_HISTOGRAM_BOUNDS[i].toFixed(1)} to ${R_HISTOGRAM_BOUNDS[i + 1].toFixed(1)}`, count: 0 })
+  }
+  buckets.push({ bucket: '> 3.0', count: 0 })
+
+  for (const r of rMultiples) {
+    if (r < -3) {
+      buckets[0].count += 1
+      continue
+    }
+    if (r > 3) {
+      buckets[buckets.length - 1].count += 1
+      continue
+    }
+    let idx = R_HISTOGRAM_BOUNDS.length - 2
+    for (let i = 0; i < R_HISTOGRAM_BOUNDS.length - 1; i++) {
+      if (r >= R_HISTOGRAM_BOUNDS[i] && r < R_HISTOGRAM_BOUNDS[i + 1]) {
+        idx = i
+        break
+      }
+    }
+    buckets[idx + 1].count += 1
+  }
+  return buckets
+}
+
+function skewKurtosisOf(rMultiples: number[]): { skewness: number | null; kurtosis: number | null } {
+  if (rMultiples.length < 5) return { skewness: null, kurtosis: null }
+  const sd = stdevOf(rMultiples)
+  if (sd === 0) return { skewness: 0, kurtosis: 0 }
+  const m = mean(rMultiples)
+  const skewness = mean(rMultiples.map((r) => (r - m) ** 3)) / sd ** 3
+  const kurtosis = mean(rMultiples.map((r) => (r - m) ** 4)) / sd ** 4 - 3
+  return { skewness, kurtosis }
+}
+
+function strategyQuantMetrics(
+  trades: StrategyTradeRow[],
+  equityCurve: { date: string; cumulativePnl: number }[],
+  drawdown: { series: { date: string; drawdown: number }[]; maxDrawdown: number }
+) {
+  const dailyPnl = dailyPnlSeriesOf(trades)
+  const totalPnl = trades.reduce((s, t) => s + t.pnl, 0)
+  const maxDrawdownAbs = drawdown.maxDrawdown
+
+  const { maxWinStreak, maxLossStreak } = consecutiveStreaksOf(trades)
+
+  const wins = trades.filter((t) => t.pnl > 0).map((t) => t.pnl)
+  const losses = trades.filter((t) => t.pnl < 0).map((t) => Math.abs(t.pnl))
+  const outlierWinRatio = outlierRatioOf(wins)
+  const outlierLossRatio = outlierRatioOf(losses)
+
+  const rTrades = trades.filter((t) => t.r_multiple !== null && t.r_multiple !== undefined)
+  const rMultiples = rTrades.map((t) => t.r_multiple as number)
+  const sqn = sqnOf(rMultiples)
+  const { skewness, kurtosis } = skewKurtosisOf(rMultiples)
+
+  return {
+    sharpe: round2(sharpeOf(dailyPnl)),
+    sortino: round2(sortinoOf(dailyPnl)),
+    calmar: round2(calmarOf(dailyPnl, maxDrawdownAbs, totalPnl)),
+    recoveryFactor: round2(recoveryFactorOf(totalPnl, maxDrawdownAbs)),
+    ulcerIndex: round2(ulcerIndexOf(drawdown.series)),
+    gainToPainRatio: round2(gainToPainOf(trades)),
+    maxWinStreak,
+    maxLossStreak,
+    outlierWinRatio: round2(outlierWinRatio),
+    outlierLossRatio: round2(outlierLossRatio),
+    sqn: sqn === null ? null : round2(sqn),
+    sqnRating: sqn === null ? null : sqnRating(sqn),
+    rMultipleHistogram: rHistogramOf(rMultiples),
+    skewness: skewness === null ? null : round2(skewness),
+    kurtosis: kurtosis === null ? null : round2(kurtosis),
+  }
+}
+// -----------------------------------------------------------------------------------------------
+
 export interface StrategyDetail {
   id: number
   name: string
   description: string
   stats: ReturnType<typeof strategyStats>
+  quantMetrics: ReturnType<typeof strategyQuantMetrics>
   equityCurve: { date: string; cumulativePnl: number }[]
   drawdown: { series: { date: string; drawdown: number }[]; maxDrawdown: number }
   dayOfWeek: ReturnType<typeof dayOfWeekBreakdownOf>
@@ -586,14 +778,16 @@ export function getStrategyDetail(strategyId: number): StrategyDetail | null {
 
   const equityCurve = equityCurveOf(trades)
   const { series: drawdownSeries, maxDrawdown } = drawdownOf(equityCurve)
+  const drawdownRounded = { series: drawdownSeries, maxDrawdown: round2(maxDrawdown) }
 
   return {
     id: strategy.id,
     name: strategy.name,
     description: strategy.description ?? '',
     stats: strategyStats(trades),
+    quantMetrics: strategyQuantMetrics(trades, equityCurve, drawdownRounded),
     equityCurve,
-    drawdown: { series: drawdownSeries, maxDrawdown: round2(maxDrawdown) },
+    drawdown: drawdownRounded,
     dayOfWeek: dayOfWeekBreakdownOf(trades),
     trades: trades
       .slice(-50)

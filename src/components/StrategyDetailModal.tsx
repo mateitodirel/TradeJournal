@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { Bar, BarChart, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip } from 'recharts'
 import { Modal } from './Modal'
 import { EquityCurveChart } from './EquityCurveChart'
 import { DayOfWeekChart } from './DayOfWeekChart'
 import { formatRatio } from '../format'
+import { COLORS } from '../colors'
 import type { StrategyDetail } from '../types'
 
 function StatRow({ label, value, color }: { label: string; value: string; color?: string }) {
@@ -109,6 +111,61 @@ export function StrategyDetailModal({
               Not enough trades yet for an equity curve
             </div>
           )}
+        </div>
+
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <div className="card" style={{ padding: 16, width: 240, flexShrink: 0 }}>
+            <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 4 }}>
+              Advanced Metrics <span style={{ color: 'var(--text-dim)' }}>(PnL-based)</span>
+            </div>
+            <StatRow label="Sharpe" value={detail.quantMetrics.sharpe.toFixed(2)} />
+            <StatRow label="Sortino" value={detail.quantMetrics.sortino.toFixed(2)} />
+            <StatRow label="Calmar" value={detail.quantMetrics.calmar.toFixed(2)} />
+            <StatRow label="Recovery Factor" value={formatRatio(detail.quantMetrics.recoveryFactor)} />
+            <StatRow label="Ulcer Index" value={`$${detail.quantMetrics.ulcerIndex.toFixed(2)}`} />
+            <StatRow label="Gain-to-Pain" value={formatRatio(detail.quantMetrics.gainToPainRatio)} />
+            <StatRow label="Max Win Streak" value={String(detail.quantMetrics.maxWinStreak)} color="var(--green)" />
+            <StatRow label="Max Loss Streak" value={String(detail.quantMetrics.maxLossStreak)} color="var(--red)" />
+            <StatRow label="Outlier Win Ratio" value={detail.quantMetrics.outlierWinRatio.toFixed(2)} />
+            <StatRow label="Outlier Loss Ratio" value={detail.quantMetrics.outlierLossRatio.toFixed(2)} />
+            <StatRow
+              label="SQN"
+              value={detail.quantMetrics.sqn === null ? 'Need 5+ R-trades' : `${detail.quantMetrics.sqn.toFixed(2)} (${detail.quantMetrics.sqnRating})`}
+            />
+            <StatRow
+              label="Skew / Kurtosis (R)"
+              value={
+                detail.quantMetrics.skewness === null || detail.quantMetrics.kurtosis === null
+                  ? 'Need 5+ R-trades'
+                  : `${detail.quantMetrics.skewness.toFixed(2)} / ${detail.quantMetrics.kurtosis.toFixed(2)}`
+              }
+            />
+          </div>
+
+          <div className="card" style={{ padding: 16, flex: 2, minWidth: 320 }}>
+            <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 4 }}>R-Multiple Distribution</div>
+            {detail.quantMetrics.rMultipleHistogram.every((b) => b.count === 0) ? (
+              <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-dim)' }}>
+                No R-multiples logged yet
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={detail.quantMetrics.rMultipleHistogram}>
+                  <XAxis dataKey="bucket" tick={{ fill: COLORS.textMuted, fontSize: 10 }} axisLine={{ stroke: COLORS.border }} tickLine={false} interval={0} angle={-45} textAnchor="end" height={60} />
+                  <YAxis tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <Tooltip
+                    contentStyle={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 12 }}
+                    formatter={(v) => [v, 'Trades']}
+                  />
+                  <Bar dataKey="count" radius={[4, 4, 4, 4]}>
+                    {detail.quantMetrics.rMultipleHistogram.map((b, i) => (
+                      <Cell key={i} fill={b.bucket.startsWith('-') || b.bucket.startsWith('<') ? COLORS.red : COLORS.green} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
         </div>
 
         <DayOfWeekChart data={detail.dayOfWeek} />

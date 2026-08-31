@@ -89,6 +89,25 @@ export interface StrategyDetail {
     avgWin: number
     avgLoss: number
   }
+  // quantstats-style metrics pack — $-denominated (this app has no reliable per-strategy
+  // starting balance), Sharpe/Sortino/Calmar are annualized ratios of day-aggregated PnL.
+  quantMetrics: {
+    sharpe: number
+    sortino: number
+    calmar: number
+    recoveryFactor: number
+    ulcerIndex: number
+    gainToPainRatio: number
+    maxWinStreak: number
+    maxLossStreak: number
+    outlierWinRatio: number
+    outlierLossRatio: number
+    sqn: number | null
+    sqnRating: string | null
+    rMultipleHistogram: { bucket: string; count: number }[]
+    skewness: number | null
+    kurtosis: number | null
+  }
   equityCurve: { date: string; cumulativePnl: number }[]
   drawdown: { series: { date: string; drawdown: number }[]; maxDrawdown: number }
   dayOfWeek: { day: string; trades: number; pnl: number; winRate: number }[]
