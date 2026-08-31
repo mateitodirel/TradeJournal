@@ -308,6 +308,8 @@ export interface FundedChallengeParams {
   lockDrawdownAtBreakeven?: boolean
   maxDayProfitPct?: number | null
   enforceConsistencyRule?: boolean
+  // When set, scope the simulation to one strategy's trades instead of the whole account.
+  strategyId?: number | null
 }
 
 export interface FundedChallengeResult {
@@ -328,7 +330,16 @@ const PLACEHOLDER_R_OUTCOMES = [1, 1, -1, -1, 2, -1, 1, -1, 1.5, -1]
 
 export function simulateFundedChallenge(params: FundedChallengeParams): FundedChallengeResult {
   const db = getDb()
-  const rows = db.prepare('SELECT pnl, r_multiple, risk_per_trade, date FROM trades ORDER BY date ASC').all() as {
+  const clauses: string[] = []
+  const p: (string | number)[] = []
+  if (params.strategyId) {
+    clauses.push('strategy_id = ?')
+    p.push(params.strategyId)
+  }
+  const finalWhere = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
+  const rows = db
+    .prepare(`SELECT pnl, r_multiple, risk_per_trade, date FROM trades ${finalWhere} ORDER BY date ASC`)
+    .all(...p) as {
     pnl: number
     r_multiple: number | null
     risk_per_trade: number | null
@@ -794,4 +805,114 @@ export function getStrategyDetail(strategyId: number): StrategyDetail | null {
       .reverse()
       .map((t) => ({ id: t.id, date: t.date, name: t.name, pair: t.pair, pnl: t.pnl, followed_plan: !!t.followed_plan })),
   }
+}
+
+// --- per-strategy prop-firm simulation history --------------------------------------------------
+// Persists the inputs/outputs of a strategy-scoped simulateFundedChallenge() run so pass
+// probability can be tracked over time as more trades are logged for that strategy.
+
+export interface StrategyPropSimHistoryEntry {
+  id: number
+  strategyId: number
+  presetLabel: string | null
+  profitTargetPct: number
+  maxDailyLossPct: number
+  maxOverallDrawdownPct: number
+  drawdownMode: DrawdownMode
+  riskPerTradePct: number
+  tradingDaysRemaining: number
+  passRate: number
+  dailyLossBreachRate: number
+  maxDrawdownBreachRate: number
+  consistencyBreachRate: number
+  ranOutOfDaysRate: number
+  credibilityWeight: number
+  createdAt: string
+}
+
+interface StrategyPropSimRow {
+  id: number
+  strategy_id: number
+  preset_label: string | null
+  profit_target_pct: number
+  max_daily_loss_pct: number
+  max_overall_drawdown_pct: number
+  drawdown_mode: string
+  risk_per_trade_pct: number
+  trading_days_remaining: number
+  pass_rate: number
+  daily_loss_breach_rate: number
+  max_drawdown_breach_rate: number
+  consistency_breach_rate: number
+  ran_out_of_days_rate: number
+  credibility_weight: number
+  created_at: string
+}
+
+function mapStrategyPropSimRow(row: StrategyPropSimRow): StrategyPropSimHistoryEntry {
+  return {
+    id: row.id,
+    strategyId: row.strategy_id,
+    presetLabel: row.preset_label,
+    profitTargetPct: row.profit_target_pct,
+    maxDailyLossPct: row.max_daily_loss_pct,
+    maxOverallDrawdownPct: row.max_overall_drawdown_pct,
+    drawdownMode: row.drawdown_mode as DrawdownMode,
+    riskPerTradePct: row.risk_per_trade_pct,
+    tradingDaysRemaining: row.trading_days_remaining,
+    passRate: row.pass_rate,
+    dailyLossBreachRate: row.daily_loss_breach_rate,
+    maxDrawdownBreachRate: row.max_drawdown_breach_rate,
+    consistencyBreachRate: row.consistency_breach_rate,
+    ranOutOfDaysRate: row.ran_out_of_days_rate,
+    credibilityWeight: row.credibility_weight,
+    createdAt: row.created_at,
+  }
+}
+
+export function saveStrategyPropSimResult(
+  strategyId: number,
+  presetLabel: string | null,
+  params: FundedChallengeParams,
+  result: FundedChallengeResult
+): StrategyPropSimHistoryEntry {
+  const db = getDb()
+  const drawdownMode: DrawdownMode = params.drawdownMode ?? 'trailing-intraday'
+  const info = db
+    .prepare(
+      `INSERT INTO strategy_prop_sim_results (
+        strategy_id, preset_label, profit_target_pct, max_daily_loss_pct, max_overall_drawdown_pct,
+        drawdown_mode, risk_per_trade_pct, trading_days_remaining,
+        pass_rate, daily_loss_breach_rate, max_drawdown_breach_rate, consistency_breach_rate,
+        ran_out_of_days_rate, credibility_weight
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      strategyId,
+      presetLabel,
+      params.profitTargetPct,
+      params.maxDailyLossPct,
+      params.maxOverallDrawdownPct,
+      drawdownMode,
+      params.riskPerTradePct,
+      params.tradingDaysRemaining,
+      result.passRate,
+      result.dailyLossBreachRate,
+      result.maxDrawdownBreachRate,
+      result.consistencyBreachRate,
+      result.ranOutOfDaysRate,
+      result.credibilityWeight
+    )
+  const row = db
+    .prepare('SELECT * FROM strategy_prop_sim_results WHERE id = ?')
+    .get(info.lastInsertRowid) as unknown as StrategyPropSimRow
+  return mapStrategyPropSimRow(row)
+}
+
+export function getStrategyPropSimHistory(strategyId: number): StrategyPropSimHistoryEntry[] {
+  const db = getDb()
+  const rows = db
+    .prepare('SELECT * FROM strategy_prop_sim_results WHERE strategy_id = ? ORDER BY created_at DESC LIMIT 20')
+    .all(strategyId) as unknown as StrategyPropSimRow[]
+  return rows.map(mapStrategyPropSimRow)
 }

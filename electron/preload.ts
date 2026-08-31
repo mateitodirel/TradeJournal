@@ -48,6 +48,9 @@ contextBridge.exposeInMainWorld('api', {
     getSummary: (filters: unknown) => invoke('analytics:getSummary', filters),
     getMonthlyBreakdown: (filters: unknown) => invoke('analytics:getMonthlyBreakdown', filters),
     simulateFundedChallenge: (params: unknown) => invoke('analytics:simulateFundedChallenge', params),
+    saveStrategyPropSimResult: (strategyId: number, presetLabel: string | null, params: unknown, result: unknown) =>
+      invoke('analytics:saveStrategyPropSimResult', strategyId, presetLabel, params, result),
+    getStrategyPropSimHistory: (strategyId: number) => invoke('analytics:getStrategyPropSimHistory', strategyId),
   },
   csv: {
     openForImport: () => invoke('csv:openForImport'),

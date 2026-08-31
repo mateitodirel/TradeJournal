@@ -146,6 +146,26 @@ export function getDb(): DatabaseSync {
     );
     CREATE INDEX IF NOT EXISTS idx_entity_confluences_owner ON entity_confluences(entity_type, entity_id);
 
+    CREATE TABLE IF NOT EXISTS strategy_prop_sim_results (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      strategy_id INTEGER NOT NULL REFERENCES strategies(id) ON DELETE CASCADE,
+      preset_label TEXT,
+      profit_target_pct REAL NOT NULL,
+      max_daily_loss_pct REAL NOT NULL,
+      max_overall_drawdown_pct REAL NOT NULL,
+      drawdown_mode TEXT NOT NULL,
+      risk_per_trade_pct REAL NOT NULL,
+      trading_days_remaining REAL NOT NULL,
+      pass_rate REAL NOT NULL,
+      daily_loss_breach_rate REAL NOT NULL,
+      max_drawdown_breach_rate REAL NOT NULL,
+      consistency_breach_rate REAL NOT NULL,
+      ran_out_of_days_rate REAL NOT NULL,
+      credibility_weight REAL NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_strategy_prop_sim_results_strategy ON strategy_prop_sim_results(strategy_id);
+
     DROP TABLE IF EXISTS milestones;
   `)
 

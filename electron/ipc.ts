@@ -9,9 +9,12 @@ import {
   getStrategyDetail,
   getMonthlyBreakdown,
   simulateFundedChallenge,
+  saveStrategyPropSimResult,
+  getStrategyPropSimHistory,
   type SummaryFilters,
   type MonthlyBreakdownFilters,
   type FundedChallengeParams,
+  type FundedChallengeResult,
 } from './analytics'
 import { readCsvFile, importTrades, tradesToCsv, type ColumnMapping } from './csv'
 
@@ -407,6 +410,15 @@ export function registerIpcHandlers() {
   })
   ipcMain.handle('analytics:simulateFundedChallenge', (_e, params: FundedChallengeParams) => {
     return simulateFundedChallenge(params)
+  })
+  ipcMain.handle(
+    'analytics:saveStrategyPropSimResult',
+    (_e, strategyId: number, presetLabel: string | null, params: FundedChallengeParams, result: FundedChallengeResult) => {
+      return saveStrategyPropSimResult(strategyId, presetLabel, params, result)
+    }
+  )
+  ipcMain.handle('analytics:getStrategyPropSimHistory', (_e, strategyId: number) => {
+    return getStrategyPropSimHistory(strategyId)
   })
 
   // ---------- csv ----------

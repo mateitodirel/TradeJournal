@@ -48,6 +48,8 @@ declare global {
         getSummary: (filters: any) => Promise<any>
         getMonthlyBreakdown: (filters: any) => Promise<any[]>
         simulateFundedChallenge: (params: any) => Promise<any>
+        saveStrategyPropSimResult: (strategyId: number, presetLabel: string | null, params: any, result: any) => Promise<any>
+        getStrategyPropSimHistory: (strategyId: number) => Promise<any[]>
       }
       csv: {
         openForImport: () => Promise<{ filePath: string; headers: string[]; sampleRows: string[][]; totalRows: number } | null>

@@ -154,6 +154,8 @@ export interface FundedChallengeParams {
   lockDrawdownAtBreakeven?: boolean
   maxDayProfitPct?: number | null
   enforceConsistencyRule?: boolean
+  // When set, scope the simulation to one strategy's trades instead of the whole account.
+  strategyId?: number | null
 }
 
 export interface FundedChallengeResult {
@@ -166,6 +168,25 @@ export interface FundedChallengeResult {
   medianDaysToPass: number | null
   insufficientData: boolean
   credibilityWeight: number
+}
+
+export interface StrategyPropSimHistoryEntry {
+  id: number
+  strategyId: number
+  presetLabel: string | null
+  profitTargetPct: number
+  maxDailyLossPct: number
+  maxOverallDrawdownPct: number
+  drawdownMode: DrawdownMode
+  riskPerTradePct: number
+  tradingDaysRemaining: number
+  passRate: number
+  dailyLossBreachRate: number
+  maxDrawdownBreachRate: number
+  consistencyBreachRate: number
+  ranOutOfDaysRate: number
+  credibilityWeight: number
+  createdAt: string
 }
 
 export const SESSIONS = ['Asia', 'London', 'New York', 'London/NY Overlap'] as const

@@ -3,9 +3,12 @@ import { Bar, BarChart, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip } from 
 import { Modal } from './Modal'
 import { EquityCurveChart } from './EquityCurveChart'
 import { DayOfWeekChart } from './DayOfWeekChart'
+import { StrategyPropFirmTab } from './StrategyPropFirmTab'
 import { formatRatio } from '../format'
 import { COLORS } from '../colors'
 import type { StrategyDetail } from '../types'
+
+type DetailTab = 'overview' | 'propfirm'
 
 function StatRow({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
@@ -30,6 +33,7 @@ export function StrategyDetailModal({
   const [editingDesc, setEditingDesc] = useState(false)
   const [descDraft, setDescDraft] = useState('')
   const [saving, setSaving] = useState(false)
+  const [activeTab, setActiveTab] = useState<DetailTab>('overview')
 
   const load = () => {
     setLoading(true)
@@ -66,6 +70,23 @@ export function StrategyDetailModal({
   return (
     <Modal title={detail.name} onClose={onClose} wide>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="glass-rail">
+          <button
+            className={`glass-rail__item${activeTab === 'overview' ? ' active' : ''}`}
+            onClick={() => setActiveTab('overview')}
+          >
+            Overview
+          </button>
+          <button
+            className={`glass-rail__item${activeTab === 'propfirm' ? ' active' : ''}`}
+            onClick={() => setActiveTab('propfirm')}
+          >
+            Prop Firm
+          </button>
+        </div>
+
+        {activeTab === 'overview' && (
+        <>
         <div className="card" style={{ padding: 14 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Rules / Description</div>
@@ -201,6 +222,10 @@ export function StrategyDetailModal({
             </table>
           )}
         </div>
+        </>
+        )}
+
+        {activeTab === 'propfirm' && <StrategyPropFirmTab strategyId={detail.id} />}
       </div>
     </Modal>
   )
