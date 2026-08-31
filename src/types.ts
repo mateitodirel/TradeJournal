@@ -123,12 +123,18 @@ export interface MonthlyBreakdownEntry {
   tradeCount: number
 }
 
+export type DrawdownMode = 'static' | 'trailing-eod' | 'trailing-intraday'
+
 export interface FundedChallengeParams {
   profitTargetPct: number
   maxDailyLossPct: number
   maxOverallDrawdownPct: number
   riskPerTradePct: number
   tradingDaysRemaining: number
+  drawdownMode?: DrawdownMode
+  lockDrawdownAtBreakeven?: boolean
+  maxDayProfitPct?: number | null
+  enforceConsistencyRule?: boolean
 }
 
 export interface FundedChallengeResult {
@@ -136,9 +142,11 @@ export interface FundedChallengeResult {
   passRate: number
   dailyLossBreachRate: number
   maxDrawdownBreachRate: number
+  consistencyBreachRate: number
   ranOutOfDaysRate: number
   medianDaysToPass: number | null
   insufficientData: boolean
+  credibilityWeight: number
 }
 
 export const SESSIONS = ['Asia', 'London', 'New York', 'London/NY Overlap'] as const
