@@ -340,3 +340,61 @@ table.data-table tbody tr:hover {
   }
   .wn-cell { opacity: 1; }
 }
+
+/* Cursor follower */
+
+/* Hide the OS cursor only while the follower is mounted + active, scoped
+   to body rather than a blanket `* { cursor: none }`. Text inputs always
+   keep a visible caret regardless of this rule (see override below). */
+body.cursor-follower-active {
+  cursor: none;
+}
+body.cursor-follower-active a,
+body.cursor-follower-active button,
+body.cursor-follower-active [role="button"] {
+  cursor: none;
+}
+body.cursor-follower-active input,
+body.cursor-follower-active textarea,
+body.cursor-follower-active select,
+body.cursor-follower-active [contenteditable] {
+  cursor: text !important;
+}
+
+.cursor-follower__dot,
+.cursor-follower__ring {
+  position: fixed;
+  top: 0;
+  left: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9999;
+  will-change: transform;
+  /* transform is driven every frame by the rAF loop in CursorFollower.tsx —
+     never transition it, or it will fight the lerp. Only size/opacity animate. */
+}
+
+.cursor-follower__dot {
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  background: var(--accent);
+  transition: opacity 0.15s ease;
+}
+
+.cursor-follower__ring {
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  border: 1.5px solid rgba(62, 207, 142, 0.45);
+  background: rgba(62, 207, 142, 0.06);
+  transition: width 0.18s cubic-bezier(0.16, 1, 0.3, 1), height 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+    margin 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.15s ease, background 0.18s ease;
+}
+
+.cursor-follower__ring--hover {
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
+  background: rgba(62, 207, 142, 0.1);
+}

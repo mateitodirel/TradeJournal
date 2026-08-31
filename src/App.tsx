@@ -7,6 +7,7 @@ import { MissedTradesPage } from './pages/MissedTradesPage'
 import { WhatsNewPage } from './pages/WhatsNewPage'
 import { TradeFormModal } from './components/TradeFormModal'
 import { AccountsModal } from './components/AccountsModal'
+import { CursorFollower } from './components/CursorFollower'
 import { LATEST_VERSION } from './changelog'
 import { getLastSeenVersion } from './whatsNewSeen'
 import type { Account, Confluence, Strategy } from './types'
@@ -45,6 +46,7 @@ function App() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <CursorFollower />
       <header style={{ padding: '20px 28px 0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
