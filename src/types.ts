@@ -10,6 +10,7 @@ export interface Strategy {
   id: number
   name: string
   description: string
+  rules: string[]
 }
 
 export interface Confluence {
@@ -34,6 +35,7 @@ export interface Trade {
   account_id: number | null
   positive_tags: string[]
   negative_tags: string[]
+  followed_rules: string[]
   notes: string | null
   created_at: string
   confluence_ids: number[]
@@ -74,10 +76,23 @@ export interface StrategyPerformance {
   avgLoss: number
 }
 
+export interface RuleAdherenceBucket {
+  tradeCount: number
+  winRate: number
+  expectancy: number
+  avgRMultiple: number
+  totalPnl: number
+}
+
+export type RuleAdherenceStats =
+  | { hasRules: false }
+  | { hasRules: true; allFollowed: RuleAdherenceBucket; notAllFollowed: RuleAdherenceBucket }
+
 export interface StrategyDetail {
   id: number
   name: string
   description: string
+  rules: string[]
   stats: {
     tradeCount: number
     winRate: number
@@ -89,6 +104,7 @@ export interface StrategyDetail {
     avgWin: number
     avgLoss: number
   }
+  ruleAdherence: RuleAdherenceStats
   equityCurve: { date: string; cumulativePnl: number }[]
   drawdown: { series: { date: string; drawdown: number }[]; maxDrawdown: number }
   dayOfWeek: { day: string; trades: number; pnl: number; winRate: number }[]

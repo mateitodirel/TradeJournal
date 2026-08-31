@@ -431,7 +431,22 @@ export interface StrategyPerformance {
   avgLoss: number
 }
 
-type StrategyTradeRow = TradeRow & { r_multiple: number | null; name: string; pair: string | null }
+type StrategyTradeRow = TradeRow & {
+  r_multiple: number | null
+  name: string
+  pair: string | null
+  followed_rules: string | null
+}
+
+function parseJsonArray(raw: unknown): string[] {
+  if (typeof raw !== 'string' || !raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
 
 function strategyStats(trades: StrategyTradeRow[]) {
   const winRate = winRateOf(trades)
@@ -454,6 +469,61 @@ function strategyStats(trades: StrategyTradeRow[]) {
     planAdherence: round1(planAdherenceOf(trades) * 100),
     avgWin: round2(avgWin),
     avgLoss: round2(avgLoss),
+  }
+}
+
+export interface RuleAdherenceBucket {
+  tradeCount: number
+  winRate: number
+  expectancy: number
+  avgRMultiple: number
+  totalPnl: number
+}
+
+export type RuleAdherenceStats =
+  | { hasRules: false }
+  | { hasRules: true; allFollowed: RuleAdherenceBucket; notAllFollowed: RuleAdherenceBucket }
+
+function ruleAdherenceBucket(trades: StrategyTradeRow[]): RuleAdherenceBucket {
+  const winRate = winRateOf(trades)
+  const totalPnl = trades.reduce((s, t) => s + t.pnl, 0)
+  const expectancy = trades.length ? totalPnl / trades.length : 0
+  const rTrades = trades.filter((t) => t.r_multiple !== null && t.r_multiple !== undefined)
+  const avgRMultiple = rTrades.length ? rTrades.reduce((s, t) => s + (t.r_multiple ?? 0), 0) / rTrades.length : 0
+  return {
+    tradeCount: trades.length,
+    winRate: round1(winRate * 100),
+    expectancy: round2(expectancy),
+    avgRMultiple: round2(avgRMultiple),
+    totalPnl: round2(totalPnl),
+  }
+}
+
+/**
+ * Classifies each trade as "all rules followed" vs "not all followed" for a strategy's
+ * defined rule checklist, and computes the same stat shape for each bucket — this is what
+ * answers "is the strategy bad, or is my execution bad?"
+ *
+ * When the strategy has no rules defined yet, adherence tracking is meaningless (there's
+ * nothing to have followed or not), so this returns { hasRules: false } rather than a
+ * misleading 0%/100% split.
+ */
+export function ruleAdherenceStats(trades: StrategyTradeRow[], rules: string[]): RuleAdherenceStats {
+  if (!rules.length) return { hasRules: false }
+
+  const allFollowedTrades: StrategyTradeRow[] = []
+  const notAllFollowedTrades: StrategyTradeRow[] = []
+  for (const t of trades) {
+    const followed = parseJsonArray(t.followed_rules)
+    const allFollowed = rules.every((r) => followed.includes(r))
+    if (allFollowed) allFollowedTrades.push(t)
+    else notAllFollowedTrades.push(t)
+  }
+
+  return {
+    hasRules: true,
+    allFollowed: ruleAdherenceBucket(allFollowedTrades),
+    notAllFollowed: ruleAdherenceBucket(notAllFollowedTrades),
   }
 }
 
@@ -481,7 +551,9 @@ export interface StrategyDetail {
   id: number
   name: string
   description: string
+  rules: string[]
   stats: ReturnType<typeof strategyStats>
+  ruleAdherence: RuleAdherenceStats
   equityCurve: { date: string; cumulativePnl: number }[]
   drawdown: { series: { date: string; drawdown: number }[]; maxDrawdown: number }
   dayOfWeek: ReturnType<typeof dayOfWeekBreakdownOf>
@@ -490,14 +562,16 @@ export interface StrategyDetail {
 
 export function getStrategyDetail(strategyId: number): StrategyDetail | null {
   const db = getDb()
-  const strategy = db.prepare('SELECT id, name, description FROM strategies WHERE id = ?').get(strategyId) as
-    | { id: number; name: string; description: string | null }
+  const strategy = db.prepare('SELECT id, name, description, rules FROM strategies WHERE id = ?').get(strategyId) as
+    | { id: number; name: string; description: string | null; rules: string | null }
     | undefined
   if (!strategy) return null
 
+  const rules = parseJsonArray(strategy.rules)
+
   const trades = db
     .prepare(
-      'SELECT id, date, pnl, followed_plan, session, r_multiple, name, pair FROM trades WHERE strategy_id = ? ORDER BY date ASC'
+      'SELECT id, date, pnl, followed_plan, session, r_multiple, name, pair, followed_rules FROM trades WHERE strategy_id = ? ORDER BY date ASC'
     )
     .all(strategyId) as unknown as StrategyTradeRow[]
 
@@ -508,7 +582,9 @@ export function getStrategyDetail(strategyId: number): StrategyDetail | null {
     id: strategy.id,
     name: strategy.name,
     description: strategy.description ?? '',
+    rules,
     stats: strategyStats(trades),
+    ruleAdherence: ruleAdherenceStats(trades, rules),
     equityCurve,
     drawdown: { series: drawdownSeries, maxDrawdown: round2(maxDrawdown) },
     dayOfWeek: dayOfWeekBreakdownOf(trades),

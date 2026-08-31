@@ -28,12 +28,17 @@ export function StrategyDetailModal({
   const [editingDesc, setEditingDesc] = useState(false)
   const [descDraft, setDescDraft] = useState('')
   const [saving, setSaving] = useState(false)
+  const [editingRules, setEditingRules] = useState(false)
+  const [rulesDraft, setRulesDraft] = useState<string[]>([])
+  const [newRuleText, setNewRuleText] = useState('')
+  const [savingRules, setSavingRules] = useState(false)
 
   const load = () => {
     setLoading(true)
     window.api.strategies.getDetail(strategyId).then((d) => {
       setDetail(d)
       setDescDraft(d?.description ?? '')
+      setRulesDraft(d?.rules ?? [])
       setLoading(false)
     })
   }
@@ -50,6 +55,30 @@ export function StrategyDetailModal({
       load()
     } finally {
       setSaving(false)
+    }
+  }
+
+  const addRule = () => {
+    const text = newRuleText.trim()
+    if (!text) return
+    setRulesDraft((prev) => [...prev, text])
+    setNewRuleText('')
+  }
+
+  const removeRule = (index: number) => {
+    setRulesDraft((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const saveRules = async () => {
+    if (!detail) return
+    setSavingRules(true)
+    try {
+      await window.api.strategies.update(detail.id, { name: detail.name, description: detail.description, rules: rulesDraft })
+      setEditingRules(false)
+      onChanged()
+      load()
+    } finally {
+      setSavingRules(false)
     }
   }
 
@@ -84,6 +113,51 @@ export function StrategyDetailModal({
           )}
         </div>
 
+        <div className="card" style={{ padding: 14 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Rules Checklist</div>
+            {!editingRules && <button className="btn" style={{ padding: '3px 8px', fontSize: 11 }} onClick={() => setEditingRules(true)}>Edit</button>}
+          </div>
+          {editingRules ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {rulesDraft.map((rule, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div style={{ flex: 1, fontSize: 12.5 }}>{rule}</div>
+                  <button className="btn btn-danger" style={{ padding: '3px 8px', fontSize: 11 }} onClick={() => removeRule(i)}>✕</button>
+                </div>
+              ))}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  className="input"
+                  placeholder="Add a rule (e.g. Waited for confirmation candle)"
+                  value={newRuleText}
+                  onChange={(e) => setNewRuleText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      addRule()
+                    }
+                  }}
+                  style={{ flex: 1 }}
+                />
+                <button className="btn" onClick={addRule} disabled={!newRuleText.trim()}>+ Add rule</button>
+              </div>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button className="btn" onClick={() => { setEditingRules(false); setRulesDraft(detail.rules); setNewRuleText('') }}>Cancel</button>
+                <button className="btn btn-primary" onClick={saveRules} disabled={savingRules}>{savingRules ? 'Saving…' : 'Save'}</button>
+              </div>
+            </div>
+          ) : detail.rules.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {detail.rules.map((rule, i) => (
+                <div key={i} style={{ fontSize: 12.5, lineHeight: 1.5 }}>• {rule}</div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ color: 'var(--text-dim)' }}>No rules defined yet. Click Edit to build a checklist for this playbook.</div>
+          )}
+        </div>
+
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           <div className="card" style={{ padding: 16, width: 240, flexShrink: 0 }}>
             <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 4 }}>Performance</div>
@@ -107,6 +181,42 @@ export function StrategyDetailModal({
           ) : (
             <div className="card" style={{ padding: 16, flex: 2, minWidth: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-dim)' }}>
               Not enough trades yet for an equity curve
+            </div>
+          )}
+        </div>
+
+        <div className="card" style={{ padding: 16 }}>
+          <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 10 }}>Rule Adherence</div>
+          {!detail.ruleAdherence.hasRules ? (
+            <div style={{ color: 'var(--text-dim)', fontSize: 12.5, lineHeight: 1.6 }}>
+              Define rules above to unlock adherence tracking — see how much your edge depends on execution vs the setup itself.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 4, color: 'var(--green)' }}>All Rules Followed</div>
+                <StatRow label="Trades" value={String(detail.ruleAdherence.allFollowed.tradeCount)} />
+                <StatRow label="Win Rate" value={`${detail.ruleAdherence.allFollowed.winRate}%`} />
+                <StatRow label="Expectancy / trade" value={`$${detail.ruleAdherence.allFollowed.expectancy.toFixed(2)}`} />
+                <StatRow label="Avg R Multiple" value={detail.ruleAdherence.allFollowed.avgRMultiple.toFixed(2)} />
+                <StatRow
+                  label="Total P&L"
+                  value={`$${detail.ruleAdherence.allFollowed.totalPnl.toFixed(0)}`}
+                  color={detail.ruleAdherence.allFollowed.totalPnl >= 0 ? 'var(--green)' : 'var(--red)'}
+                />
+              </div>
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 4, color: 'var(--red)' }}>Not All Followed</div>
+                <StatRow label="Trades" value={String(detail.ruleAdherence.notAllFollowed.tradeCount)} />
+                <StatRow label="Win Rate" value={`${detail.ruleAdherence.notAllFollowed.winRate}%`} />
+                <StatRow label="Expectancy / trade" value={`$${detail.ruleAdherence.notAllFollowed.expectancy.toFixed(2)}`} />
+                <StatRow label="Avg R Multiple" value={detail.ruleAdherence.notAllFollowed.avgRMultiple.toFixed(2)} />
+                <StatRow
+                  label="Total P&L"
+                  value={`$${detail.ruleAdherence.notAllFollowed.totalPnl.toFixed(0)}`}
+                  color={detail.ruleAdherence.notAllFollowed.totalPnl >= 0 ? 'var(--green)' : 'var(--red)'}
+                />
+              </div>
             </div>
           )}
         </div>
